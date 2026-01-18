@@ -2,10 +2,23 @@
 // Uses browser's print-to-PDF functionality
 
 window.generatePDF = function(formData) {
-    const pdfWindow = window.open('', '_blank', 'width=1000,height=800');
-    
-    // Determine image source
-    let imageHTML = '';
+    // HTML Escaping for XSS protection
+    const escapeHtml = (text) => {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    };
+
+    try {
+        const pdfWindow = window.open('', '_blank', 'width=1000,height=800');
+        if (!pdfWindow) {
+            alert('Pop-up wurde blockiert. Bitte erlauben Sie Pop-ups für diese Seite.');
+            return;
+        }
+
+        // Determine image source
+        let imageHTML = '';
     if (formData.imageType === 'upload' && formData.uploadedImage) {
         imageHTML = `<img src="${formData.uploadedImage}" alt="Persona" style="width: 120px; height: 120px; object-fit: cover; border-radius: 60px;">`;
     } else if (formData.imageType === 'avatar' && formData.selectedAvatar) {
@@ -38,7 +51,7 @@ window.generatePDF = function(formData) {
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Persona: ${formData.name || 'Teilnehmer'}</title>
+    <title>Persona: ${escapeHtml(formData.name) || 'Teilnehmer'}</title>
     <style>
         @page { 
             margin: 1.5cm;
@@ -262,11 +275,11 @@ window.generatePDF = function(formData) {
                 ${imageHTML}
             </div>
             <div class="profile-info">
-                <h2>${formData.name || 'Persona Name'}</h2>
+                <h2>${escapeHtml(formData.name) || 'Persona Name'}</h2>
                 <p class="meta">
-                    ${formData.alter ? formData.alter + (formData.alter.includes('Jahr') ? '' : ' Jahre') : 'Alter nicht angegeben'}
-                    ${formData.beruf ? ' | ' + formData.beruf : ''}
-                    ${formData.familiensituation ? ' | ' + formData.familiensituation : ''}
+                    ${formData.alter ? escapeHtml(formData.alter) + (formData.alter.includes('Jahr') ? '' : ' Jahre') : 'Alter nicht angegeben'}
+                    ${formData.beruf ? ' | ' + escapeHtml(formData.beruf) : ''}
+                    ${formData.familiensituation ? ' | ' + escapeHtml(formData.familiensituation) : ''}
                 </p>
             </div>
         </div>
@@ -275,10 +288,10 @@ window.generatePDF = function(formData) {
         <div class="section">
             <div class="section-header">Im Berufsförderungswerk</div>
             <div class="section-content">
-                ${formData.massnahme ? `<p><strong>Maßnahme:</strong> ${formData.massnahme}</p>` : ''}
-                ${formData.semester ? `<p><strong>Semester/Phase:</strong> ${formData.semester}</p>` : ''}
-                ${formData.grundReha ? `<p><strong>Grund für Reha:</strong> ${formData.grundReha}</p>` : ''}
-                ${formData.besonderheiten ? `<p><strong>Besonderheiten:</strong> ${formData.besonderheiten}</p>` : ''}
+                ${formData.massnahme ? `<p><strong>Maßnahme:</strong> ${escapeHtml(formData.massnahme)}</p>` : ''}
+                ${formData.semester ? `<p><strong>Semester/Phase:</strong> ${escapeHtml(formData.semester)}</p>` : ''}
+                ${formData.grundReha ? `<p><strong>Grund für Reha:</strong> ${escapeHtml(formData.grundReha)}</p>` : ''}
+                ${formData.besonderheiten ? `<p><strong>Besonderheiten:</strong> ${escapeHtml(formData.besonderheiten)}</p>` : ''}
             </div>
         </div>
         ` : ''}
@@ -287,9 +300,9 @@ window.generatePDF = function(formData) {
         <div class="section">
             <div class="section-header">Vorwissen & Ausgangskompetenzen</div>
             <div class="section-content">
-                ${formData.fachlichesVorwissen ? `<p><strong>Thematisches Vorwissen:</strong> ${formData.fachlichesVorwissen}</p>` : ''}
-                ${formData.anwendungsbezogeneVorerfahrungen ? `<p><strong>Anwendungsbezogene Vorerfahrungen:</strong> ${formData.anwendungsbezogeneVorerfahrungen}</p>` : ''}
-                ${formData.offenePunkte ? `<p><strong>Offene Punkte:</strong> ${formData.offenePunkte}</p>` : ''}
+                ${formData.fachlichesVorwissen ? `<p><strong>Thematisches Vorwissen:</strong> ${escapeHtml(formData.fachlichesVorwissen)}</p>` : ''}
+                ${formData.anwendungsbezogeneVorerfahrungen ? `<p><strong>Anwendungsbezogene Vorerfahrungen:</strong> ${escapeHtml(formData.anwendungsbezogeneVorerfahrungen)}</p>` : ''}
+                ${formData.offenePunkte ? `<p><strong>Offene Punkte:</strong> ${escapeHtml(formData.offenePunkte)}</p>` : ''}
             </div>
         </div>
         ` : ''}
@@ -298,10 +311,10 @@ window.generatePDF = function(formData) {
         <div class="section">
             <div class="section-header">Motivation & Lernhaltung</div>
             <div class="section-content">
-                ${formData.warumTeilnahme ? `<p><strong>Teilnahme-Grund:</strong> ${formData.warumTeilnahme}</p>` : ''}
-                ${formData.haltungLernen ? `<p><strong>Haltung zum Lernen:</strong> ${formData.haltungLernen}</p>` : ''}
-                ${formData.aengsteVorbehalte ? `<p><strong>Hemmnisse & Vorbehalte:</strong> ${formData.aengsteVorbehalte}</p>` : ''}
-                ${formData.wasMotiviert ? `<p><strong>Was hält am Ball:</strong> ${formData.wasMotiviert}</p>` : ''}
+                ${formData.warumTeilnahme ? `<p><strong>Teilnahme-Grund:</strong> ${escapeHtml(formData.warumTeilnahme)}</p>` : ''}
+                ${formData.haltungLernen ? `<p><strong>Haltung zum Lernen:</strong> ${escapeHtml(formData.haltungLernen)}</p>` : ''}
+                ${formData.aengsteVorbehalte ? `<p><strong>Hemmnisse & Vorbehalte:</strong> ${escapeHtml(formData.aengsteVorbehalte)}</p>` : ''}
+                ${formData.wasMotiviert ? `<p><strong>Was hält am Ball:</strong> ${escapeHtml(formData.wasMotiviert)}</p>` : ''}
             </div>
         </div>
         ` : ''}
@@ -310,11 +323,11 @@ window.generatePDF = function(formData) {
         <div class="section">
             <div class="section-header">Lernvoraussetzungen</div>
             <div class="section-content">
-                ${formData.digitaleLernvoraussetzungen ? `<p><strong>Digitale Lernvoraussetzungen:</strong> ${formData.digitaleLernvoraussetzungen}</p>` : ''}
-                ${formData.bewaehrteLernzugaenge ? `<p><strong>Bewährte Lernzugänge:</strong> ${formData.bewaehrteLernzugaenge}</p>` : ''}
-                ${formData.lerntempo ? `<p><strong>Lerntempo:</strong> ${formData.lerntempo}</p>` : ''}
-                ${formData.selbststaendigkeit ? `<p><strong>Selbstständigkeit:</strong> ${formData.selbststaendigkeit}</p>` : ''}
-                ${formData.technischeRahmenbedingungen ? `<p><strong>Technische Rahmenbedingungen:</strong> ${formData.technischeRahmenbedingungen}</p>` : ''}
+                ${formData.digitaleLernvoraussetzungen ? `<p><strong>Digitale Lernvoraussetzungen:</strong> ${escapeHtml(formData.digitaleLernvoraussetzungen)}</p>` : ''}
+                ${formData.bewaehrteLernzugaenge ? `<p><strong>Bewährte Lernzugänge:</strong> ${escapeHtml(formData.bewaehrteLernzugaenge)}</p>` : ''}
+                ${formData.lerntempo ? `<p><strong>Lerntempo:</strong> ${escapeHtml(formData.lerntempo)}</p>` : ''}
+                ${formData.selbststaendigkeit ? `<p><strong>Selbstständigkeit:</strong> ${escapeHtml(formData.selbststaendigkeit)}</p>` : ''}
+                ${formData.technischeRahmenbedingungen ? `<p><strong>Technische Rahmenbedingungen:</strong> ${escapeHtml(formData.technischeRahmenbedingungen)}</p>` : ''}
             </div>
         </div>
         ` : ''}
@@ -323,9 +336,9 @@ window.generatePDF = function(formData) {
         <div class="section">
             <div class="section-header">Ziele & Unterstützungsbedarf</div>
             <div class="section-content">
-                ${formData.persoenlicheZiele ? `<p><strong>Persönliche Ziele:</strong> ${formData.persoenlicheZiele}</p>` : ''}
-                ${formData.herausforderungen ? `<p><strong>Herausforderungen:</strong> ${formData.herausforderungen}</p>` : ''}
-                ${formData.unterstuetzung ? `<p><strong>Erforderliche Unterstützung:</strong> ${formData.unterstuetzung}</p>` : ''}
+                ${formData.persoenlicheZiele ? `<p><strong>Persönliche Ziele:</strong> ${escapeHtml(formData.persoenlicheZiele)}</p>` : ''}
+                ${formData.herausforderungen ? `<p><strong>Herausforderungen:</strong> ${escapeHtml(formData.herausforderungen)}</p>` : ''}
+                ${formData.unterstuetzung ? `<p><strong>Erforderliche Unterstützung:</strong> ${escapeHtml(formData.unterstuetzung)}</p>` : ''}
             </div>
         </div>
         ` : ''}
@@ -334,7 +347,7 @@ window.generatePDF = function(formData) {
         <div class="section">
             <div class="section-header">Persönliches</div>
             <div class="section-content">
-                <p>${formData.persoenliches.replace(/\n/g, '<br>')}</p>
+                <p>${escapeHtml(formData.persoenliches).replace(/\n/g, '<br>')}</p>
             </div>
         </div>
         ` : ''}
@@ -351,6 +364,10 @@ window.generatePDF = function(formData) {
 </body>
 </html>`;
     
-    pdfWindow.document.write(html);
-    pdfWindow.document.close();
+        pdfWindow.document.write(html);
+        pdfWindow.document.close();
+    } catch (error) {
+        console.error('Fehler bei der PDF-Generierung:', error);
+        alert('Fehler beim Erstellen der PDF. Bitte versuchen Sie es erneut.');
+    }
 };

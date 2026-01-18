@@ -19,6 +19,38 @@
     box-sizing: border-box;
 }
 
+/* Skip Link for Accessibility */
+.skip-link {
+    position: absolute;
+    top: -40px;
+    left: 0;
+    background: var(--jetblau);
+    color: white;
+    padding: 8px 16px;
+    text-decoration: none;
+    z-index: 10000;
+    border-radius: 0 0 8px 0;
+}
+
+.skip-link:focus {
+    top: 0;
+}
+
+/* Enhanced Focus Indicators */
+*:focus {
+    outline: 3px solid var(--ideengelb);
+    outline-offset: 2px;
+}
+
+button:focus,
+input:focus,
+select:focus,
+textarea:focus,
+a:focus {
+    outline: 3px solid var(--ideengelb);
+    outline-offset: 2px;
+}
+
 body {
     font-family: system-ui, -apple-system, sans-serif;
     background: #f8f9fa;

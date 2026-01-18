@@ -4,7 +4,18 @@
 const PersonaApp = {
     currentStep: 0,
     totalSteps: 8,
-    
+
+    // HTML Escaping for XSS protection
+    escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    },
+
+    // LocalStorage key
+    storageKey: 'learnshift_persona_data',
+
     formData: {
         // Step 1: Basics
         name: '',
@@ -66,9 +77,70 @@ const PersonaApp = {
     ],
     
     init() {
-        this.renderStep();
-        this.updateProgress();
-        this.attachEventListeners();
+        try {
+            this.loadFromStorage();
+            this.renderStep();
+            this.updateProgress();
+            this.attachEventListeners();
+            this.startAutoSave();
+        } catch (error) {
+            console.error('Fehler bei der Initialisierung:', error);
+            this.showError('Die Anwendung konnte nicht vollständig geladen werden. Bitte Seite neu laden.');
+        }
+    },
+
+    // LocalStorage: Load data
+    loadFromStorage() {
+        try {
+            const saved = localStorage.getItem(this.storageKey);
+            if (saved) {
+                const data = JSON.parse(saved);
+                this.formData = { ...this.formData, ...data.formData };
+                this.currentStep = data.currentStep || 0;
+            }
+        } catch (error) {
+            console.warn('Konnte gespeicherte Daten nicht laden:', error);
+        }
+    },
+
+    // LocalStorage: Save data
+    saveToStorage() {
+        try {
+            const dataToSave = {
+                formData: this.formData,
+                currentStep: this.currentStep,
+                timestamp: new Date().toISOString()
+            };
+            localStorage.setItem(this.storageKey, JSON.stringify(dataToSave));
+        } catch (error) {
+            console.warn('Konnte Daten nicht speichern:', error);
+        }
+    },
+
+    // LocalStorage: Clear data
+    clearStorage() {
+        try {
+            localStorage.removeItem(this.storageKey);
+        } catch (error) {
+            console.warn('Konnte Daten nicht löschen:', error);
+        }
+    },
+
+    // Auto-save every 10 seconds
+    startAutoSave() {
+        setInterval(() => {
+            this.saveCurrentStep();
+            this.saveToStorage();
+        }, 10000);
+    },
+
+    // Error display
+    showError(message) {
+        const errorDiv = document.createElement('div');
+        errorDiv.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #f44336; color: white; padding: 1rem 1.5rem; border-radius: 10px; z-index: 9999; box-shadow: 0 4px 12px rgba(0,0,0,0.3);';
+        errorDiv.textContent = message;
+        document.body.appendChild(errorDiv);
+        setTimeout(() => errorDiv.remove(), 5000);
     },
     
     attachEventListeners() {
@@ -83,15 +155,17 @@ const PersonaApp = {
             this.currentStep--;
             this.renderStep();
             this.updateProgress();
+            this.saveToStorage();
         }
     },
-    
+
     nextStep() {
         if (this.currentStep < this.totalSteps) {
             this.saveCurrentStep();
             this.currentStep++;
             this.renderStep();
             this.updateProgress();
+            this.saveToStorage();
         }
     },
     
@@ -200,28 +274,28 @@ const PersonaApp = {
             </div>
             
             <div class="form-group">
-                <label>Persona-Name</label>
-                <input type="text" name="name" value="${this.formData.name}" placeholder="z.B. Uwe K.">
-                <div class="field-helper">Fiktiver Name zur besseren Vorstellung</div>
+                <label for="persona-name">Persona-Name</label>
+                <input type="text" id="persona-name" name="name" value="${this.escapeHtml(this.formData.name)}" placeholder="z.B. Uwe K." aria-describedby="name-helper">
+                <div class="field-helper" id="name-helper">Fiktiver Name zur besseren Vorstellung</div>
             </div>
-            
+
             <div class="grid-2">
                 <div class="form-group">
-                    <label>Alter</label>
-                    <input type="text" name="alter" value="${this.formData.alter}" placeholder="z.B. Mitte 30, Anfang 40">
+                    <label for="persona-alter">Alter</label>
+                    <input type="text" id="persona-alter" name="alter" value="${this.escapeHtml(this.formData.alter)}" placeholder="z.B. Mitte 30, Anfang 40">
                 </div>
-                
+
                 <div class="form-group">
-                    <label>Vor-Beruf</label>
-                    <input type="text" name="beruf" value="${this.formData.beruf}" placeholder="z.B. Metallbauer">
+                    <label for="persona-beruf">Vor-Beruf</label>
+                    <input type="text" id="persona-beruf" name="beruf" value="${this.escapeHtml(this.formData.beruf)}" placeholder="z.B. Metallbauer">
                 </div>
             </div>
-            
+
             <div class="form-group">
-                <label>Familiensituation</label>
-                <input type="text" name="familiensituation" value="${this.formData.familiensituation}" 
-                       placeholder="z.B. verheiratet, 2 Kinder">
-                <div class="field-helper">Optional: Relevant für zeitliche Verfügbarkeit o.ä.</div>
+                <label for="persona-familie">Familiensituation</label>
+                <input type="text" id="persona-familie" name="familiensituation" value="${this.escapeHtml(this.formData.familiensituation)}"
+                       placeholder="z.B. verheiratet, 2 Kinder" aria-describedby="familie-helper">
+                <div class="field-helper" id="familie-helper">Optional: Relevant für zeitliche Verfügbarkeit o.ä.</div>
             </div>
         `;
     },
@@ -301,102 +375,111 @@ const PersonaApp = {
     },
     
     attachStep2Listeners() {
-        const btnAvatar = document.querySelector('.btn-avatar');
-        const btnUpload = document.querySelector('.btn-upload');
-        
-        if (btnAvatar) {
-            btnAvatar.addEventListener('click', () => {
+        // Event delegation instead of individual listeners (prevents memory leaks)
+        const container = document.getElementById('step-content');
+        if (!container) return;
+
+        // Handle button clicks via delegation
+        container.addEventListener('click', (e) => {
+            if (e.target.closest('.btn-avatar')) {
                 this.formData.imageType = 'avatar';
                 this.updateImageTypeUI();
-            });
-        }
-        
-        if (btnUpload) {
-            btnUpload.addEventListener('click', () => {
+            } else if (e.target.closest('.btn-upload')) {
                 this.formData.imageType = 'upload';
                 this.updateImageTypeUI();
-            });
-        }
-        
-        document.querySelectorAll('.avatar-option').forEach(option => {
-            option.addEventListener('click', (e) => {
-                const avatarId = parseInt(e.currentTarget.dataset.avatar);
+            } else if (e.target.closest('.avatar-option')) {
+                const avatarId = parseInt(e.target.closest('.avatar-option').dataset.avatar);
                 this.formData.selectedAvatar = avatarId;
                 this.formData.imageType = 'avatar';
                 document.querySelectorAll('.avatar-option').forEach(opt => opt.classList.remove('selected'));
-                e.currentTarget.classList.add('selected');
+                e.target.closest('.avatar-option').classList.add('selected');
+            }
+        });
+
+        // Handle keyboard navigation for avatars
+        document.querySelectorAll('.avatar-option').forEach((option, index) => {
+            option.setAttribute('tabindex', '0');
+            option.setAttribute('role', 'button');
+            option.setAttribute('aria-label', `Avatar ${index + 1} auswählen`);
+            option.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    option.click();
+                }
             });
         });
-        
+
         const uploadArea = document.getElementById('upload-area');
         const fileInput = document.getElementById('image-upload');
-        
+
         if (uploadArea && fileInput) {
-            // Remove old event listeners by cloning
-            const newUploadArea = uploadArea.cloneNode(true);
-            uploadArea.parentNode.replaceChild(newUploadArea, uploadArea);
-            
-            const newFileInput = document.getElementById('image-upload');
-            
+            // Validate file size and type
+            const validateFile = (file) => {
+                const maxSize = 5 * 1024 * 1024; // 5MB
+                const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+
+                if (!file) return { valid: false, error: 'Keine Datei ausgewählt' };
+                if (!allowedTypes.includes(file.type)) {
+                    return { valid: false, error: 'Ungültiger Dateityp. Nur JPG, PNG und GIF erlaubt.' };
+                }
+                if (file.size > maxSize) {
+                    return { valid: false, error: 'Datei zu groß. Maximal 5MB erlaubt.' };
+                }
+                return { valid: true };
+            };
+
+            const handleFile = (file) => {
+                const validation = validateFile(file);
+                if (!validation.valid) {
+                    this.showError(validation.error);
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    this.formData.uploadedImage = event.target.result;
+                    this.formData.imageType = 'upload';
+                    this.renderStep();
+                };
+                reader.onerror = () => {
+                    this.showError('Fehler beim Laden der Datei');
+                };
+                reader.readAsDataURL(file);
+            };
+
             // Click to upload
-            newUploadArea.addEventListener('click', (e) => {
+            uploadArea.addEventListener('click', (e) => {
                 if (e.target.tagName !== 'IMG') {
-                    newFileInput.click();
+                    fileInput.click();
                 }
             });
-            
+
             // File selection
-            newFileInput.addEventListener('change', (e) => {
+            fileInput.addEventListener('change', (e) => {
                 const file = e.target.files[0];
-                if (file && file.type.startsWith('image/')) {
-                    const reader = new FileReader();
-                    reader.onload = (event) => {
-                        this.formData.uploadedImage = event.target.result;
-                        this.formData.imageType = 'upload';
-                        
-                        // Re-render step to show uploaded image
-                        this.renderStep();
-                        this.attachStep2Listeners();
-                    };
-                    reader.readAsDataURL(file);
-                } else if (file) {
-                    alert('Bitte wählen Sie eine Bilddatei (JPG, PNG, GIF)');
-                }
+                if (file) handleFile(file);
             });
-            
+
             // Drag & Drop
-            newUploadArea.addEventListener('dragover', (e) => {
+            uploadArea.addEventListener('dragover', (e) => {
                 e.preventDefault();
-                newUploadArea.style.borderColor = 'var(--ideengelb)';
-                newUploadArea.style.background = '#FFF5CC';
+                uploadArea.style.borderColor = 'var(--ideengelb)';
+                uploadArea.style.background = '#FFF5CC';
             });
-            
-            newUploadArea.addEventListener('dragleave', (e) => {
+
+            uploadArea.addEventListener('dragleave', (e) => {
                 e.preventDefault();
-                newUploadArea.style.borderColor = 'var(--ideengelb-75)';
-                newUploadArea.style.background = 'white';
+                uploadArea.style.borderColor = 'var(--ideengelb-75)';
+                uploadArea.style.background = 'white';
             });
-            
-            newUploadArea.addEventListener('drop', (e) => {
+
+            uploadArea.addEventListener('drop', (e) => {
                 e.preventDefault();
-                newUploadArea.style.borderColor = 'var(--ideengelb-75)';
-                newUploadArea.style.background = 'white';
-                
+                uploadArea.style.borderColor = 'var(--ideengelb-75)';
+                uploadArea.style.background = 'white';
+
                 const file = e.dataTransfer.files[0];
-                if (file && file.type.startsWith('image/')) {
-                    const reader = new FileReader();
-                    reader.onload = (event) => {
-                        this.formData.uploadedImage = event.target.result;
-                        this.formData.imageType = 'upload';
-                        
-                        // Re-render step to show uploaded image
-                        this.renderStep();
-                        this.attachStep2Listeners();
-                    };
-                    reader.readAsDataURL(file);
-                } else if (file) {
-                    alert('Bitte wählen Sie eine Bilddatei (JPG, PNG, GIF)');
-                }
+                if (file) handleFile(file);
             });
         }
     },
@@ -440,28 +523,28 @@ const PersonaApp = {
             </div>
             
             <div class="form-group">
-                <label>Maßnahme / Bildungsgang</label>
-                <input type="text" name="massnahme" value="${this.formData.massnahme}" 
+                <label for="massnahme">Maßnahme / Bildungsgang</label>
+                <input type="text" id="massnahme" name="massnahme" value="${this.escapeHtml(this.formData.massnahme)}"
                        placeholder="z.B. Umschulung Fachinformatiker/in">
             </div>
-            
+
             <div class="form-group">
-                <label>Semester / Phase</label>
-                <input type="text" name="semester" value="${this.formData.semester}" 
+                <label for="semester">Semester / Phase</label>
+                <input type="text" id="semester" name="semester" value="${this.escapeHtml(this.formData.semester)}"
                        placeholder="z.B. 2. Semester, Eingangsphase">
             </div>
-            
+
             <div class="form-group">
-                <label>Grund für berufliche Reha</label>
-                <textarea name="grundReha" placeholder="Förderbedarfe, Einschränkungen – bitte allgemein halten"
-                          style="min-height: 100px;">${this.formData.grundReha}</textarea>
-                <div class="field-helper">Lernrelevante Aspekte, nicht medizinisch</div>
+                <label for="grundReha">Grund für berufliche Reha</label>
+                <textarea id="grundReha" name="grundReha" placeholder="Förderbedarfe, Einschränkungen – bitte allgemein halten"
+                          style="min-height: 100px;" aria-describedby="reha-helper">${this.escapeHtml(this.formData.grundReha)}</textarea>
+                <div class="field-helper" id="reha-helper">Lernrelevante Aspekte, nicht medizinisch</div>
             </div>
-            
+
             <div class="form-group">
-                <label>Weitere lernrelevante Besonderheiten</label>
-                <textarea name="besonderheiten" placeholder="z.B. feste Tagesstruktur, wechselnde Belastbarkeit, zusätzliche Reha-Termine, erhöhter Unterstützungsbedarf, eingeschränkte zeitliche Flexibilität"
-                          style="min-height: 120px;">${this.formData.besonderheiten}</textarea>
+                <label for="besonderheiten">Weitere lernrelevante Besonderheiten</label>
+                <textarea id="besonderheiten" name="besonderheiten" placeholder="z.B. feste Tagesstruktur, wechselnde Belastbarkeit, zusätzliche Reha-Termine, erhöhter Unterstützungsbedarf, eingeschränkte zeitliche Flexibilität"
+                          style="min-height: 120px;">${this.escapeHtml(this.formData.besonderheiten)}</textarea>
             </div>
         `;
     },
@@ -474,21 +557,21 @@ const PersonaApp = {
             <div class="leitfrage">Was bringt die Person in Bezug auf Ihr gewähltes Thema bereits mit?</div>
             
             <div class="form-group">
-                <label>Thematisches Vorwissen</label>
-                <textarea name="fachlichesVorwissen" placeholder="z.B. bekannte Begriffe, Grundlagen oder Zusammenhänge aus Ausbildung, Praxis oder früheren Schulungen – bezogen auf das Thema"
-                          style="min-height: 120px;">${this.formData.fachlichesVorwissen}</textarea>
+                <label for="fachlichesVorwissen">Thematisches Vorwissen</label>
+                <textarea id="fachlichesVorwissen" name="fachlichesVorwissen" placeholder="z.B. bekannte Begriffe, Grundlagen oder Zusammenhänge aus Ausbildung, Praxis oder früheren Schulungen – bezogen auf das Thema"
+                          style="min-height: 120px;">${this.escapeHtml(this.formData.fachlichesVorwissen || '')}</textarea>
             </div>
             
             <div class="form-group">
-                <label>Anwendungsbezogene Vorerfahrungen</label>
-                <textarea name="anwendungsbezogeneVorerfahrungen" placeholder="Hat die Person das Thema bereits in der Praxis angewendet? In welchem Kontext?"
-                          style="min-height: 120px;">${this.formData.anwendungsbezogeneVorerfahrungen || ''}</textarea>
+                <label for="anwendungsbezogeneVorerfahrungen">Anwendungsbezogene Vorerfahrungen</label>
+                <textarea id="anwendungsbezogeneVorerfahrungen" name="anwendungsbezogeneVorerfahrungen" placeholder="Hat die Person das Thema bereits in der Praxis angewendet? In welchem Kontext?"
+                          style="min-height: 120px;">${this.escapeHtml(this.formData.anwendungsbezogeneVorerfahrungen || '')}</textarea>
             </div>
             
             <div class="form-group">
-                <label>Offene Punkte im Vorwissen (optional)</label>
-                <textarea name="offenePunkte" placeholder="Welche Inhalte, Grundlagen oder Anwendungen fehlen der Person noch, um das Thema gut bearbeiten zu können?"
-                          style="min-height: 120px;">${this.formData.offenePunkte || ''}</textarea>
+                <label for="offenePunkte">Offene Punkte im Vorwissen (optional)</label>
+                <textarea id="offenePunkte" name="offenePunkte" placeholder="Welche Inhalte, Grundlagen oder Anwendungen fehlen der Person noch, um das Thema gut bearbeiten zu können?"
+                          style="min-height: 120px;">${this.escapeHtml(this.formData.offenePunkte || '')}</textarea>
             </div>
         `;
     },
@@ -501,27 +584,27 @@ const PersonaApp = {
             <div class="leitfrage">Was motiviert die Person – und was beeinflusst ihr Lernverhalten?</div>
             
             <div class="form-group">
-                <label>Warum nimmt die Person an der Maßnahme teil?</label>
-                <textarea name="warumTeilnahme" placeholder="z.B. berufliche Perspektive, Vorgabe durch Kostenträger, Wunsch nach Stabilität, Neustart, Absicherung"
-                          style="min-height: 100px;">${this.formData.warumTeilnahme}</textarea>
+                <label for="warumTeilnahme">Warum nimmt die Person an der Maßnahme teil?</label>
+                <textarea id="warumTeilnahme" name="warumTeilnahme" placeholder="z.B. berufliche Perspektive, Vorgabe durch Kostenträger, Wunsch nach Stabilität, Neustart, Absicherung"
+                          style="min-height: 100px;">${this.escapeHtml(this.formData.warumTeilnahme || '')}</textarea>
             </div>
             
             <div class="form-group">
-                <label>Haltung zum Lernen</label>
-                <textarea name="haltungLernen" placeholder="z.B. eher vorsichtig, skeptisch, neugierig, aktiv, offen für Neues, vermeidend"
-                          style="min-height: 100px;">${this.formData.haltungLernen}</textarea>
+                <label for="haltungLernen">Haltung zum Lernen</label>
+                <textarea id="haltungLernen" name="haltungLernen" placeholder="z.B. eher vorsichtig, skeptisch, neugierig, aktiv, offen für Neues, vermeidend"
+                          style="min-height: 100px;">${this.escapeHtml(this.formData.haltungLernen || '')}</textarea>
             </div>
             
             <div class="form-group">
-                <label>Hemmnisse und Vorbehalte beim Lernen</label>
-                <textarea name="aengsteVorbehalte" placeholder="z.B. Technik, Überforderung, Angst vor Bewertung, frühere Lernerfahrungen"
-                          style="min-height: 100px;">${this.formData.aengsteVorbehalte}</textarea>
+                <label for="aengsteVorbehalte">Hemmnisse und Vorbehalte beim Lernen</label>
+                <textarea id="aengsteVorbehalte" name="aengsteVorbehalte" placeholder="z.B. Technik, Überforderung, Angst vor Bewertung, frühere Lernerfahrungen"
+                          style="min-height: 100px;">${this.escapeHtml(this.formData.aengsteVorbehalte || '')}</textarea>
             </div>
             
             <div class="form-group">
-                <label>Was hält die Person beim Lernen konkret am Ball?</label>
-                <textarea name="wasMotiviert" placeholder="z.B. sichtbare Fortschritte, klare Struktur, Praxisbezug, Anerkennung, Sicherheit"
-                          style="min-height: 100px;">${this.formData.wasMotiviert}</textarea>
+                <label for="wasMotiviert">Was hält die Person beim Lernen konkret am Ball?</label>
+                <textarea id="wasMotiviert" name="wasMotiviert" placeholder="z.B. sichtbare Fortschritte, klare Struktur, Praxisbezug, Anerkennung, Sicherheit"
+                          style="min-height: 100px;">${this.escapeHtml(this.formData.wasMotiviert || '')}</textarea>
             </div>
         `;
     },
@@ -534,36 +617,36 @@ const PersonaApp = {
             <div class="leitfrage">Wie lernt die Person gut?</div>
             
             <div class="form-group">
-                <label>Digitale Lernvoraussetzungen im BFW-Kontext</label>
+                <label for="digitaleLernvoraussetzungen">Digitale Lernvoraussetzungen im BFW-Kontext</label>
                 <p style="color: var(--jetblau-75); font-size: 0.9rem; margin-bottom: 0.75rem;">
                     Lernrelevante digitale Fähigkeiten und Erfahrungen für das Arbeiten im Lernangebot.
                 </p>
-                <textarea name="digitaleLernvoraussetzungen" placeholder="z.B. Arbeiten am PC/Laptop, Nutzung von Lernplattformen, Umgang mit digitalen Materialien, Teilnahme an Online-Meetings, Arbeiten mit Fachsoftware"
-                          style="min-height: 120px;">${this.formData.digitaleLernvoraussetzungen || ''}</textarea>
+                <textarea id="digitaleLernvoraussetzungen" name="digitaleLernvoraussetzungen" placeholder="z.B. Arbeiten am PC/Laptop, Nutzung von Lernplattformen, Umgang mit digitalen Materialien, Teilnahme an Online-Meetings, Arbeiten mit Fachsoftware"
+                          style="min-height: 120px;">${this.escapeHtml(this.formData.digitaleLernvoraussetzungen || '')}</textarea>
             </div>
             
             <div class="form-group">
-                <label>Bewährte Lernzugänge</label>
-                <textarea name="bewaehrteLernzugaenge" placeholder="In welchen Lernformen kommt die Person gut ins Lernen? z.B. durch praktische Übungen, anschauliche Beispiele, klare Schritt-für-Schritt-Anleitungen, Austausch in der Gruppe, kurze Erklärinputs"
-                          style="min-height: 120px;">${this.formData.bewaehrteLernzugaenge || ''}</textarea>
+                <label for="bewaehrteLernzugaenge">Bewährte Lernzugänge</label>
+                <textarea id="bewaehrteLernzugaenge" name="bewaehrteLernzugaenge" placeholder="In welchen Lernformen kommt die Person gut ins Lernen? z.B. durch praktische Übungen, anschauliche Beispiele, klare Schritt-für-Schritt-Anleitungen, Austausch in der Gruppe, kurze Erklärinputs"
+                          style="min-height: 120px;">${this.escapeHtml(this.formData.bewaehrteLernzugaenge || '')}</textarea>
             </div>
             
             <div class="form-group">
-                <label>Bevorzugtes Lerntempo</label>
-                <textarea name="lerntempo" placeholder="z.B. eher langsam mit Wiederholungen, gleichmäßiges Tempo, schneller Einstieg möglich, zusätzlicher Pausenbedarf"
-                          style="min-height: 80px;">${this.formData.lerntempo}</textarea>
+                <label for="lerntempo">Bevorzugtes Lerntempo</label>
+                <textarea id="lerntempo" name="lerntempo" placeholder="z.B. eher langsam mit Wiederholungen, gleichmäßiges Tempo, schneller Einstieg möglich, zusätzlicher Pausenbedarf"
+                          style="min-height: 80px;">${this.escapeHtml(this.formData.lerntempo || '')}</textarea>
             </div>
             
             <div class="form-group">
-                <label>Selbstständigkeit beim Lernen</label>
-                <textarea name="selbststaendigkeit" placeholder="Wie viel Begleitung braucht die Person beim Lernen? z.B. enge Anleitung nötig, regelmäßige Rückmeldung hilfreich, weitgehend selbstständig"
-                          style="min-height: 80px;">${this.formData.selbststaendigkeit}</textarea>
+                <label for="selbststaendigkeit">Selbstständigkeit beim Lernen</label>
+                <textarea id="selbststaendigkeit" name="selbststaendigkeit" placeholder="Wie viel Begleitung braucht die Person beim Lernen? z.B. enge Anleitung nötig, regelmäßige Rückmeldung hilfreich, weitgehend selbstständig"
+                          style="min-height: 80px;">${this.escapeHtml(this.formData.selbststaendigkeit || '')}</textarea>
             </div>
             
             <div class="form-group">
-                <label>Technische Rahmenbedingungen für das Lernen</label>
-                <textarea name="technischeRahmenbedingungen" placeholder="z.B. eigener Laptop oder nur BFW-Rechner, Internetzugang zu Hause, Nutzung von Lernplattformen möglich, Lernen außerhalb der BFW-Zeiten möglich"
-                          style="min-height: 100px;">${this.formData.technischeRahmenbedingungen || ''}</textarea>
+                <label for="technischeRahmenbedingungen">Technische Rahmenbedingungen für das Lernen</label>
+                <textarea id="technischeRahmenbedingungen" name="technischeRahmenbedingungen" placeholder="z.B. eigener Laptop oder nur BFW-Rechner, Internetzugang zu Hause, Nutzung von Lernplattformen möglich, Lernen außerhalb der BFW-Zeiten möglich"
+                          style="min-height: 100px;">${this.escapeHtml(this.formData.technischeRahmenbedingungen || '')}</textarea>
             </div>
         `;
     },
@@ -580,21 +663,21 @@ const PersonaApp = {
             <div class="leitfrage">Was soll durch das Lernen besser werden?</div>
             
             <div class="form-group">
-                <label>Persönliche Ziele</label>
-                <textarea name="persoenlicheZiele" placeholder="Was möchte die Person erreichen? z.B. berufliche Handlungssicherheit, fachliche Kompetenz, mehr Selbstvertrauen im Umgang mit dem Thema"
-                          style="min-height: 120px;">${this.formData.persoenlicheZiele}</textarea>
+                <label for="persoenlicheZiele">Persönliche Ziele</label>
+                <textarea id="persoenlicheZiele" name="persoenlicheZiele" placeholder="Was möchte die Person erreichen? z.B. berufliche Handlungssicherheit, fachliche Kompetenz, mehr Selbstvertrauen im Umgang mit dem Thema"
+                          style="min-height: 120px;">${this.escapeHtml(this.formData.persoenlicheZiele || '')}</textarea>
             </div>
             
             <div class="form-group">
-                <label>Herausforderungen & Hürden</label>
-                <textarea name="herausforderungen" placeholder="Was erschwert das Lernen? Welche Hürden gibt es?"
-                          style="min-height: 120px;">${this.formData.herausforderungen}</textarea>
+                <label for="herausforderungen">Herausforderungen & Hürden</label>
+                <textarea id="herausforderungen" name="herausforderungen" placeholder="Was erschwert das Lernen? Welche Hürden gibt es?"
+                          style="min-height: 120px;">${this.escapeHtml(this.formData.herausforderungen || '')}</textarea>
             </div>
             
             <div class="form-group">
-                <label>Erforderliche Unterstützung zur Zielerreichung</label>
-                <textarea name="unterstuetzung" placeholder="Welche Hilfestellungen sind nötig, damit die Person die Ziele erreichen kann? z.B. zusätzliche Erklärungen, mehr Zeit, kleinschrittige Anleitungen, Feedback, technische Unterstützung"
-                          style="min-height: 120px;">${this.formData.unterstuetzung}</textarea>
+                <label for="unterstuetzung">Erforderliche Unterstützung zur Zielerreichung</label>
+                <textarea id="unterstuetzung" name="unterstuetzung" placeholder="Welche Hilfestellungen sind nötig, damit die Person die Ziele erreichen kann? z.B. zusätzliche Erklärungen, mehr Zeit, kleinschrittige Anleitungen, Feedback, technische Unterstützung"
+                          style="min-height: 120px;">${this.escapeHtml(this.formData.unterstuetzung || '')}</textarea>
             </div>
         `;
     },
@@ -611,9 +694,9 @@ const PersonaApp = {
             </p>
             
             <div class="form-group">
-                <label>Persönliches (freiwillig)</label>
-                <textarea name="persoenliches" placeholder="z.B. • typisches Zitat oder häufige Aussage („Kann ich das auch praktisch ausprobieren?") • Hobbys oder Interessen, die Lernbeispiele anschlussfähig machen • bevorzugte Medien oder Kanäle (z.B. YouTube, Podcasts, Austausch) • kleine Eigenheiten im Lernverhalten"
-                          style="min-height: 200px;">${this.formData.persoenliches}</textarea>
+                <label for="persoenliches">Persönliches (freiwillig)</label>
+                <textarea id="persoenliches" name="persoenliches" placeholder="z.B. • typisches Zitat oder häufige Aussage („Kann ich das auch praktisch ausprobieren?") • Hobbys oder Interessen, die Lernbeispiele anschlussfähig machen • bevorzugte Medien oder Kanäle (z.B. YouTube, Podcasts, Austausch) • kleine Eigenheiten im Lernverhalten"
+                          style="min-height: 200px;">${this.escapeHtml(this.formData.persoenliches || '')}</textarea>
                 <div class="field-helper">Dieses Feld ist optional, hilft aber dabei, Lernangebote lebensnah und anschlussfähig zu gestalten.</div>
             </div>
             
